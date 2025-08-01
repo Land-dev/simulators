@@ -13,7 +13,7 @@ point and box footprint.
 import numpy as np
 import jax
 import jax.numpy as jnp
-from jaxlib.xla_extension import DeviceArray
+from jax import Array
 from functools import partial
 
 from .base_cost import BaseCost
@@ -36,8 +36,8 @@ class BoxObsCost(BaseCost):
 
   @partial(jax.jit, static_argnames='self')
   def get_stage_cost(
-      self, state: DeviceArray, ctrl: DeviceArray, time_idx: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, time_idx: Array
+  ) -> Array:
     # signed distance to the box, negative inside
     sgn_dist = jnp.maximum(self.lb[0] - state[0], state[0] - self.ub[0])
     for i in range(1, self.n_dims):
@@ -98,8 +98,8 @@ class BoxObsBoxFootprintCost(BaseCost):
 
   @partial(jax.jit, static_argnames='self')
   def get_stage_cost(
-      self, state: DeviceArray, ctrl: DeviceArray, time_idx: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, time_idx: Array
+  ) -> Array:
     yaw = state[self.yaw_dim]
     rot_mat = jnp.array([[jnp.cos(yaw), -jnp.sin(yaw)],
                          [jnp.sin(yaw), jnp.cos(yaw)]])

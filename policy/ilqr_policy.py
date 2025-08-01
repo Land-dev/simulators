@@ -10,7 +10,7 @@ import copy
 import numpy as np
 import jax
 from jax import numpy as jnp
-from jaxlib.xla_extension import DeviceArray
+from jax import Array
 from functools import partial
 
 from .base_policy import BasePolicy
@@ -128,9 +128,9 @@ class ILQR(BasePolicy):
 
   @partial(jax.jit, static_argnames='self')
   def forward_pass(
-      self, nominal_states: DeviceArray, nominal_controls: DeviceArray,
-      K_closed_loop: DeviceArray, k_open_loop: DeviceArray, alpha: float
-  ) -> Tuple[DeviceArray, DeviceArray, float]:
+      self, nominal_states: Array, nominal_controls: Array,
+      K_closed_loop: Array, k_open_loop: Array, alpha: float
+  ) -> Tuple[Array, Array, float]:
     # We seperate the rollout and cost explicitly since get_cost might rely on
     # other information, such as env parameters (track), and is difficult for
     # jax to differentiate.
@@ -142,9 +142,9 @@ class ILQR(BasePolicy):
 
   @partial(jax.jit, static_argnames='self')
   def rollout(
-      self, nominal_states: DeviceArray, nominal_controls: DeviceArray,
-      K_closed_loop: DeviceArray, k_open_loop: DeviceArray, alpha: float
-  ) -> Tuple[DeviceArray, DeviceArray]:
+      self, nominal_states: Array, nominal_controls: Array,
+      K_closed_loop: Array, k_open_loop: Array, alpha: float
+  ) -> Tuple[Array, Array]:
 
     @jax.jit
     def _rollout_step(i, args):
@@ -168,8 +168,8 @@ class ILQR(BasePolicy):
 
   @partial(jax.jit, static_argnames='self')
   def rollout_nominal(
-      self, initial_state: DeviceArray, controls: DeviceArray
-  ) -> Tuple[DeviceArray, DeviceArray]:
+      self, initial_state: Array, controls: Array
+  ) -> Tuple[Array, Array]:
 
     @jax.jit
     def _rollout_nominal_step(i, args):
@@ -188,25 +188,25 @@ class ILQR(BasePolicy):
 
   @partial(jax.jit, static_argnames='self')
   def backward_pass(
-      self, c_x: DeviceArray, c_u: DeviceArray, c_xx: DeviceArray,
-      c_uu: DeviceArray, c_ux: DeviceArray, fx: DeviceArray, fu: DeviceArray,
+      self, c_x: Array, c_u: Array, c_xx: Array,
+      c_uu: Array, c_ux: Array, fx: Array, fu: Array,
       reg: float
-  ) -> Tuple[DeviceArray, DeviceArray, float]:
+  ) -> Tuple[Array, Array, float]:
     """
     Jitted backward pass looped computation.
 
     Args:
-        c_x (DeviceArray): (dim_x, N)
-        c_u (DeviceArray): (dim_u, N)
-        c_xx (DeviceArray): (dim_x, dim_x, N)
-        c_uu (DeviceArray): (dim_u, dim_u, N)
-        c_ux (DeviceArray): (dim_u, dim_x, N)
-        fx (DeviceArray): (dim_x, dim_x, N-1)
-        fu (DeviceArray): (dim_x, dim_u, N-1)
+        c_x (Array): (dim_x, N)
+        c_u (Array): (dim_u, N)
+        c_xx (Array): (dim_x, dim_x, N)
+        c_uu (Array): (dim_u, dim_u, N)
+        c_ux (Array): (dim_u, dim_x, N)
+        fx (Array): (dim_x, dim_x, N-1)
+        fu (Array): (dim_x, dim_u, N-1)
 
     Returns:
-        Ks (DeviceArray): gain matrices (dim_u, dim_x, N - 1)
-        ks (DeviceArray): gain vectors (dim_u, N - 1)
+        Ks (Array): gain matrices (dim_u, dim_x, N - 1)
+        ks (Array): gain vectors (dim_u, N - 1)
     """
 
     def init():

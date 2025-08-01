@@ -17,7 +17,7 @@ from typing import Optional, Tuple, Any, Dict
 import numpy as np
 
 from functools import partial
-from jaxlib.xla_extension import DeviceArray
+from jax import Array  # modern JAX array type
 import jax
 from jax import numpy as jnp
 
@@ -87,55 +87,55 @@ class BaseDstbDynamics(ABC):
 
   @abstractmethod
   def integrate_forward_jax(
-      self, state: DeviceArray, control: DeviceArray, disturbance: DeviceArray
-  ) -> Tuple[DeviceArray, DeviceArray, DeviceArray]:
+      self, state: Array, control: Array, disturbance: Array
+  ) -> Tuple[Array, Array, Array]:
     """
     Computes one-step time evolution of the system: x+ = f(x, u, d) with
     additional treatment on state and/or control constraints.
 
     Args:
-        state (DeviceArray)
-        control (DeviceArray)
+        state (Array)
+        control (Array)
 
     Returns:
-        DeviceArray: next state.
+        Array: next state.
     """
     raise NotImplementedError
 
   @abstractmethod
   def _integrate_forward(
-      self, state: DeviceArray, control: DeviceArray, disturbance: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, control: Array, disturbance: Array
+  ) -> Array:
     """Computes one-step time evolution of the system: x+ = f(x, u, d).
 
     Args:
-        state (DeviceArray)
-        control (DeviceArray)
-        disturbance (DeviceArray)
+        state (Array)
+        control (Array)
+        disturbance (Array)
 
     Returns:
-        DeviceArray: next state.
+        Array: next state.
     """
     raise NotImplementedError
 
   @partial(jax.jit, static_argnames='self')
   def get_jacobian(
-      self, nominal_states: DeviceArray, nominal_controls: DeviceArray,
-      nominal_disturbances: DeviceArray
-  ) -> Tuple[DeviceArray, DeviceArray, DeviceArray]:
+      self, nominal_states: Array, nominal_controls: Array,
+      nominal_disturbances: Array
+  ) -> Tuple[Array, Array, Array]:
     """
     Returns the linearized 'A' and 'B' matrix of the ego vehicle around
     nominal states and controls.
 
     Args:
-        nominal_states (DeviceArray): states along the nominal trajectory.
-        nominal_controls (DeviceArray): controls along the trajectory.
-        nominal_disturbances (DeviceArray): disturbances along the trajectory.
+        nominal_states (Array): states along the nominal trajectory.
+        nominal_controls (Array): controls along the trajectory.
+        nominal_disturbances (Array): disturbances along the trajectory.
 
     Returns:
-        DeviceArray: the Jacobian of the dynamics w.r.t. the state.
-        DeviceArray: the Jacobian of the dynamics w.r.t. the control.
-        DeviceArray: the Jacobian of the dynamics w.r.t. the disturbance.
+        Array: the Jacobian of the dynamics w.r.t. the state.
+        Array: the Jacobian of the dynamics w.r.t. the control.
+        Array: the Jacobian of the dynamics w.r.t. the disturbance.
     """
     _jac = jax.jacfwd(self._integrate_forward, argnums=[0, 1, 2])
     jac = jax.jit(jax.vmap(_jac, in_axes=(1, 1, 1), out_axes=(2, 2, 2)))

@@ -12,6 +12,7 @@ import torch
 # Dynamics.
 from .dynamics.bicycle5D import Bicycle5D
 from .dynamics.bicycle5D_dstb import BicycleDstb5D
+from .dynamics.dubins6D import Dubins6D
 
 from .cost.base_cost import BaseCost
 
@@ -44,6 +45,8 @@ class Agent:
       self.dyn = Bicycle5D(cfg, action_space)
     elif cfg.dyn == "BicycleDstb5D":
       self.dyn = BicycleDstb5D(cfg, action_space)
+    elif cfg.dyn == "Dubins6D":
+      self.dyn = Dubins6D(cfg, action_space)
     else:
       raise ValueError("Dynamics type not supported!")
 

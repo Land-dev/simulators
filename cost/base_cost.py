@@ -14,7 +14,7 @@ takes care of the vectorizing map and derivatives functions.
 from abc import ABC, abstractmethod
 from typing import Optional
 from functools import partial
-from jaxlib.xla_extension import DeviceArray
+from jax import Array  # modern JAX array type
 import jax
 from jax import numpy as jnp
 
@@ -26,20 +26,20 @@ class BaseCost(ABC):
 
   @abstractmethod
   def get_stage_cost(
-      self, state: DeviceArray, ctrl: DeviceArray, time_idx: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, time_idx: Array
+  ) -> Array:
     raise NotImplementedError
 
   @partial(jax.jit, static_argnames='self')
   def get_cost(
-      self, state: DeviceArray, ctrl: DeviceArray, time_indices: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, time_indices: Array
+  ) -> Array:
     return jax.vmap(self.get_stage_cost,
                     in_axes=(1, 1, 1))(state, ctrl, time_indices)
 
   @partial(jax.jit, static_argnames='self')
   def get_traj_cost(
-      self, state: DeviceArray, ctrl: DeviceArray, time_indices: DeviceArray
+      self, state: Array, ctrl: Array, time_indices: Array
   ) -> float:
     costs = jax.vmap(self.get_stage_cost,
                      in_axes=(1, 1, 1))(state, ctrl, time_indices)
@@ -47,54 +47,54 @@ class BaseCost(ABC):
 
   @partial(jax.jit, static_argnames='self')
   def get_cx(
-      self, state: DeviceArray, ctrl: DeviceArray, time_indices: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, time_indices: Array
+  ) -> Array:
     _cx = jax.jacfwd(self.get_stage_cost, argnums=0)
     return jax.vmap(_cx, in_axes=(1, 1, 1),
                     out_axes=1)(state, ctrl, time_indices)
 
   @partial(jax.jit, static_argnames='self')
   def get_cu(
-      self, state: DeviceArray, ctrl: DeviceArray, time_indices: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, time_indices: Array
+  ) -> Array:
     _cu = jax.jacfwd(self.get_stage_cost, argnums=1)
     return jax.vmap(_cu, in_axes=(1, 1, 1),
                     out_axes=1)(state, ctrl, time_indices)
 
   @partial(jax.jit, static_argnames='self')
   def get_cxx(
-      self, state: DeviceArray, ctrl: DeviceArray, time_indices: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, time_indices: Array
+  ) -> Array:
     _cxx = jax.jacfwd(jax.jacrev(self.get_stage_cost, argnums=0), argnums=0)
     return jax.vmap(_cxx, in_axes=(1, 1, 1),
                     out_axes=2)(state, ctrl, time_indices)
 
   @partial(jax.jit, static_argnames='self')
   def get_cuu(
-      self, state: DeviceArray, ctrl: DeviceArray, time_indices: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, time_indices: Array
+  ) -> Array:
     _cuu = jax.jacfwd(jax.jacrev(self.get_stage_cost, argnums=1), argnums=1)
     return jax.vmap(_cuu, in_axes=(1, 1, 1),
                     out_axes=2)(state, ctrl, time_indices)
 
   @partial(jax.jit, static_argnames='self')
   def get_cux(
-      self, state: DeviceArray, ctrl: DeviceArray, time_indices: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, time_indices: Array
+  ) -> Array:
     _cux = jax.jacfwd(jax.jacrev(self.get_stage_cost, argnums=1), argnums=0)
     return jax.vmap(_cux, in_axes=(1, 1, 1),
                     out_axes=2)(state, ctrl, time_indices)
 
   @partial(jax.jit, static_argnames='self')
   def get_cxu(
-      self, state: DeviceArray, ctrl: DeviceArray, time_indices: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, time_indices: Array
+  ) -> Array:
     return self.get_cux(state, ctrl, time_indices).T
 
   @partial(jax.jit, static_argnames='self')
   def get_derivatives(
-      self, state: DeviceArray, ctrl: DeviceArray, time_indices: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, time_indices: Array
+  ) -> Array:
     return (
         self.get_cx(state, ctrl, time_indices),
         self.get_cu(state, ctrl, time_indices),
@@ -118,8 +118,8 @@ class BarrierCost(BaseCost):
     self.cost = cost
 
   def get_stage_cost(
-      self, state: DeviceArray, ctrl: DeviceArray, time_idx: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, time_idx: Array
+  ) -> Array:
     _cost = self.cost.get_stage_cost(state, ctrl, time_idx)
     return self.q1 * jnp.exp(
         self.q2 * jnp.clip(a=_cost, a_min=self.clip_min, a_max=self.clip_max)

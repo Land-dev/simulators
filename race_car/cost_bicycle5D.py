@@ -9,7 +9,7 @@
 
 from typing import Dict, List, Optional
 from functools import partial
-from jaxlib.xla_extension import DeviceArray
+from jax import Array
 import numpy as np
 import jax.numpy as jnp
 import jax
@@ -105,20 +105,20 @@ class Bicycle5DCost(BaseSplineCost):
 
   @partial(jax.jit, static_argnames='self')
   def get_stage_cost(
-      self, state: DeviceArray, ctrl: DeviceArray, closest_pt: DeviceArray,
-      slope: DeviceArray, theta: DeviceArray, time_idx: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, closest_pt: Array,
+      slope: Array, theta: Array, time_idx: Array
+  ) -> Array:
     """
 
     Args:
-        state (DeviceArray, vector shape)
-        ctrl (DeviceArray, vector shape)
-        closest_pt (DeviceArray, vector shape)
-        slope (DeviceArray, vector shape)
-        theta (DeviceArray, vector shape)
+        state (Array, vector shape)
+        ctrl (Array, vector shape)
+        closest_pt (Array, vector shape)
+        slope (Array, vector shape)
+        theta (Array, vector shape)
 
     Returns:
-        DeviceArray: scalar.
+        Array: scalar.
     """
     # control cost
     cost = self.w_accel * ctrl[0]**2 + self.w_omega * ctrl[1]**2
@@ -199,17 +199,17 @@ class Bicycle5DConstraint(BaseSplineCost):
 
   @partial(jax.jit, static_argnames='self')
   def get_stage_cost(
-      self, state: DeviceArray, ctrl: DeviceArray, closest_pt: DeviceArray,
-      slope: DeviceArray, theta: DeviceArray, time_idx: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, closest_pt: Array,
+      slope: Array, theta: Array, time_idx: Array
+  ) -> Array:
     """
 
     Args:
-        state (DeviceArray, vector shape)
-        ctrl (DeviceArray, vector shape)
+        state (Array, vector shape)
+        ctrl (Array, vector shape)
 
     Returns:
-        DeviceArray: scalar.
+        Array: scalar.
     """
     cost = self.yaw_constraint.get_stage_cost(
         state, ctrl, closest_pt, slope, theta, time_idx
@@ -246,17 +246,17 @@ class Bicycle5DConstraint(BaseSplineCost):
 
   @partial(jax.jit, static_argnames='self')
   def get_cost_dict(
-      self, state: DeviceArray, ctrl: DeviceArray, closest_pt: DeviceArray,
-      slope: DeviceArray, theta: DeviceArray, time_indices: DeviceArray
+      self, state: Array, ctrl: Array, closest_pt: Array,
+      slope: Array, theta: Array, time_indices: Array
   ) -> Dict:
     """
 
     Args:
-        state (DeviceArray, vector shape)
-        ctrl (DeviceArray, vector shape)
+        state (Array, vector shape)
+        ctrl (Array, vector shape)
 
     Returns:
-        DeviceArray: scalar.
+        Array: scalar.
     """
 
     yaw_cons = self.yaw_constraint.get_cost(
@@ -299,17 +299,17 @@ class Bicycle5DSquareConstraint(BaseSplineCost):
 
   @partial(jax.jit, static_argnames='self')
   def get_stage_cost(
-      self, state: DeviceArray, ctrl: DeviceArray, closest_pt: DeviceArray,
-      slope: DeviceArray, theta: DeviceArray, time_idx: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, closest_pt: Array,
+      slope: Array, theta: Array, time_idx: Array
+  ) -> Array:
     """
 
     Args:
-        state (DeviceArray, vector shape)
-        ctrl (DeviceArray, vector shape)
+        state (Array, vector shape)
+        ctrl (Array, vector shape)
 
     Returns:
-        DeviceArray: scalar.
+        Array: scalar.
     """
     state_cost = self.constraint.get_stage_cost(
         state, ctrl, closest_pt, slope, theta, time_idx
@@ -329,17 +329,17 @@ class Bicycle5DReachabilityCost(BaseSplineCost):
 
   @partial(jax.jit, static_argnames='self')
   def get_stage_cost(
-      self, state: DeviceArray, ctrl: DeviceArray, closest_pt: DeviceArray,
-      slope: DeviceArray, theta: DeviceArray, time_idx: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, closest_pt: Array,
+      slope: Array, theta: Array, time_idx: Array
+  ) -> Array:
     """
 
     Args:
-        state (DeviceArray, vector shape)
-        ctrl (DeviceArray, vector shape)
+        state (Array, vector shape)
+        ctrl (Array, vector shape)
 
     Returns:
-        DeviceArray: scalar.
+        Array: scalar.
     """
     state_cost = self.constraint.get_stage_cost(
         state, ctrl, closest_pt, slope, theta, time_idx
@@ -349,8 +349,8 @@ class Bicycle5DReachabilityCost(BaseSplineCost):
 
   @partial(jax.jit, static_argnames='self')
   def get_traj_cost(
-      self, state: DeviceArray, ctrl: DeviceArray, closest_pt: DeviceArray,
-      slope: DeviceArray, theta: DeviceArray, time_indices: DeviceArray
+      self, state: Array, ctrl: Array, closest_pt: Array,
+      slope: Array, theta: Array, time_indices: Array
   ) -> float:
     state_costs = self.constraint.get_cost(
         state, ctrl, closest_pt, slope, theta, time_indices
@@ -375,10 +375,10 @@ class Bicycle5DRefTrajCost(BaseSplineCost):
       assert ref_ctrl.shape[1] == ref_traj.shape[1]
       self.ref_ctrl = jnp.asarray(ref_ctrl)
     if isinstance(cfg.w_ref, float):
-      self.w_ref: DeviceArray = jnp.eye(5) * cfg.w_ref
+      self.w_ref: Array = jnp.eye(5) * cfg.w_ref
     else:
       assert len(cfg.w_ref) == 5
-      self.w_ref: DeviceArray = jnp.diag(jnp.asarray(cfg.w_ref)).copy()
+      self.w_ref: Array = jnp.diag(jnp.asarray(cfg.w_ref)).copy()
     self.w_accel: float = cfg.w_accel
     self.w_omega: float = cfg.w_omega
     self.R = jnp.asarray([[self.w_accel, 0.], [0., self.w_omega]])
@@ -459,20 +459,20 @@ class Bicycle5DRefTrajCost(BaseSplineCost):
 
   @partial(jax.jit, static_argnames='self')
   def get_stage_cost(
-      self, state: DeviceArray, ctrl: DeviceArray, closest_pt: DeviceArray,
-      slope: DeviceArray, theta: DeviceArray, time_idx: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, closest_pt: Array,
+      slope: Array, theta: Array, time_idx: Array
+  ) -> Array:
     """
 
     Args:
-        state (DeviceArray, vector shape)
-        ctrl (DeviceArray, vector shape)
-        closest_pt (DeviceArray, vector shape)
-        slope (DeviceArray, vector shape)
-        theta (DeviceArray, vector shape)
+        state (Array, vector shape)
+        ctrl (Array, vector shape)
+        closest_pt (Array, vector shape)
+        slope (Array, vector shape)
+        theta (Array, vector shape)
 
     Returns:
-        DeviceArray: scalar.
+        Array: scalar.
     """
 
     # state cost

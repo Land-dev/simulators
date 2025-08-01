@@ -13,7 +13,7 @@ and box footprint.
 import numpy as np
 import jax
 import jax.numpy as jnp
-from jaxlib.xla_extension import DeviceArray
+from jax import Array
 from functools import partial
 
 from .base_cost import BaseCost
@@ -31,8 +31,8 @@ class UpperHalfCost(BaseCost):
 
   @partial(jax.jit, static_argnames='self')
   def get_stage_cost(
-      self, state: DeviceArray, ctrl: DeviceArray, time_idx: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, time_idx: Array
+  ) -> Array:
     c = state[self.dim] - self.value
     return c
 
@@ -49,8 +49,8 @@ class LowerHalfCost(BaseCost):
 
   @partial(jax.jit, static_argnames='self')
   def get_stage_cost(
-      self, state: DeviceArray, ctrl: DeviceArray, time_idx: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, time_idx: Array
+  ) -> Array:
     c = self.value - state[self.dim]
     return c
 
@@ -90,8 +90,8 @@ class UpperHalfBoxFootprintCost(BaseCost):
 
   @partial(jax.jit, static_argnames='self')
   def get_stage_cost(
-      self, state: DeviceArray, ctrl: DeviceArray, time_idx: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, time_idx: Array
+  ) -> Array:
     yaw = state[self.yaw_dim]
     rot_mat = jnp.array([[jnp.cos(yaw), -jnp.sin(yaw)],
                          [jnp.sin(yaw), jnp.cos(yaw)]])
@@ -135,8 +135,8 @@ class LowerHalfBoxFootprintCost(BaseCost):
 
   @partial(jax.jit, static_argnames='self')
   def get_stage_cost(
-      self, state: DeviceArray, ctrl: DeviceArray, time_idx: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, time_idx: Array
+  ) -> Array:
     yaw = state[self.yaw_dim]
     rot_mat = jnp.array([[jnp.cos(yaw), -jnp.sin(yaw)],
                          [jnp.sin(yaw), jnp.cos(yaw)]])

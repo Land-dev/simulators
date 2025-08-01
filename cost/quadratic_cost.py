@@ -9,7 +9,7 @@
 import numpy as np
 import jax
 import jax.numpy as jnp
-from jaxlib.xla_extension import DeviceArray
+from jax import Array
 from functools import partial
 
 from .base_cost import BaseCost
@@ -30,8 +30,8 @@ class QuadraticCost(BaseCost):
 
   @partial(jax.jit, static_argnames='self')
   def get_stage_cost(
-      self, state: DeviceArray, ctrl: DeviceArray, time_idx: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, time_idx: Array
+  ) -> Array:
     Qx = jnp.einsum("i,ni->n", state, self.Q)
     xtQx = jnp.einsum("n,n", state, Qx)
     Sx = jnp.einsum("n,mn->m", state, self.S)
@@ -52,8 +52,8 @@ class QuadraticControlCost(BaseCost):
 
   @partial(jax.jit, static_argnames='self')
   def get_stage_cost(
-      self, state: DeviceArray, ctrl: DeviceArray, time_idx: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, ctrl: Array, time_idx: Array
+  ) -> Array:
     Ru = jnp.einsum("i,mi->m", ctrl, self.R)
     utRu = jnp.einsum("m,m", ctrl, Ru)
     rtu = jnp.einsum("m,m", ctrl, self.r)
