@@ -9,7 +9,7 @@ import time
 import copy
 import numpy as np
 from jax import numpy as jnp
-from jaxlib.xla_extension import DeviceArray
+from jax import Array
 
 from .ilqr_policy import ILQR
 from ..dynamics.base_dynamics import BaseDynamics
@@ -131,10 +131,9 @@ class ILQRSpline(ILQR):
     return np.asarray(controls[:, 0]), solver_info
 
   def forward_pass(
-      self, nominal_states: DeviceArray, nominal_controls: DeviceArray,
-      K_closed_loop: DeviceArray, k_open_loop: DeviceArray, alpha: float
-  ) -> Tuple[DeviceArray, DeviceArray, float, DeviceArray, DeviceArray,
-             DeviceArray]:
+      self, nominal_states: Array, nominal_controls: Array,
+      K_closed_loop: Array, k_open_loop: Array, alpha: float
+  ) -> Tuple[Array, Array, float, Array, Array, Array]:
     X, U = self.rollout(
         nominal_states, nominal_controls, K_closed_loop, k_open_loop, alpha
     )

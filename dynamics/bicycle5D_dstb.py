@@ -16,7 +16,7 @@ is the linear acceleration and `omega` is the steering angular velocity.
 from typing import Tuple, Any, Dict
 import numpy as np
 from functools import partial
-from jaxlib.xla_extension import DeviceArray
+from jax import Array  # modern JAX array type
 import jax
 from jax import numpy as jnp
 
@@ -46,20 +46,20 @@ class BicycleDstb5D(BaseDstbDynamics):
 
   @partial(jax.jit, static_argnames='self')
   def integrate_forward_jax(
-      self, state: DeviceArray, control: DeviceArray, disturbance: DeviceArray
-  ) -> Tuple[DeviceArray, DeviceArray]:
+      self, state: Array, control: Array, disturbance: Array
+  ) -> Tuple[Array, Array]:
     """Clips the control and disturbance and computes one-step time evolution
     of the system.
 
     Args:
-        state (DeviceArray): [x, y, v, psi, delta].
-        control (DeviceArray): [accel, omega].
-        disturbance (DeviceArray): [x, y, v, psi, delta].
+        state (Array): [x, y, v, psi, delta].
+        control (Array): [accel, omega].
+        disturbance (Array): [x, y, v, psi, delta].
 
     Returns:
-        DeviceArray: next state.
-        DeviceArray: clipped control.
-        DeviceArray: clipped disturbance.
+        Array: next state.
+        Array: clipped control.
+        Array: clipped disturbance.
     """
     # Clips the controller values between min and max accel and steer values.
     ctrl_clip = jnp.clip(control, self.ctrl_space[:, 0], self.ctrl_space[:, 1])
@@ -177,8 +177,8 @@ class BicycleDstb5D(BaseDstbDynamics):
 
   @partial(jax.jit, static_argnames='self')
   def disc_deriv(
-      self, state: DeviceArray, control: DeviceArray, disturbance: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, control: Array, disturbance: Array
+  ) -> Array:
     deriv = jnp.zeros((self.dim_x,))
     deriv = deriv.at[0].set(state[2] * jnp.cos(state[3]) + disturbance[0])
     deriv = deriv.at[1].set(state[2] * jnp.sin(state[3]) + disturbance[1])
@@ -191,8 +191,8 @@ class BicycleDstb5D(BaseDstbDynamics):
 
   @partial(jax.jit, static_argnames='self')
   def _integrate_forward(
-      self, state: DeviceArray, control: DeviceArray, disturbance: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, control: Array, disturbance: Array
+  ) -> Array:
     """
     Computes one-step time evolution of the system: x_+ = f(x, u, d).
     The discrete-time dynamics is as below
@@ -203,20 +203,20 @@ class BicycleDstb5D(BaseDstbDynamics):
         delta_k+1 = delta_k + u1_k dt + d4_k dt
 
     Args:
-        state (DeviceArray): [x, y, v, psi, delta].
-        control (DeviceArray): [accel, omega].
-        disturbance (DeviceArray): [x, y, v, psi, delta].
+        state (Array): [x, y, v, psi, delta].
+        control (Array): [accel, omega].
+        disturbance (Array): [x, y, v, psi, delta].
 
     Returns:
-        DeviceArray: next state.
+        Array: next state.
     """
     return self._integrate_forward_dt(state, control, disturbance, self.dt)
 
   @partial(jax.jit, static_argnames='self')
   def _integrate_forward_dt(
-      self, state: DeviceArray, control: DeviceArray, disturbance: DeviceArray,
+      self, state: Array, control: Array, disturbance: Array,
       dt: float
-  ) -> DeviceArray:
+  ) -> Array:
     k1 = self.disc_deriv(state, control, disturbance)
     k2 = self.disc_deriv(state + k1*dt/2, control, disturbance)
     k3 = self.disc_deriv(state + k2*dt/2, control, disturbance)

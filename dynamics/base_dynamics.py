@@ -17,7 +17,7 @@ from typing import Tuple, Any
 import numpy as np
 
 from functools import partial
-from jaxlib.xla_extension import DeviceArray
+from jax import Array  # modern JAX array type
 import jax
 from jax import numpy as jnp
 
@@ -58,51 +58,51 @@ class BaseDynamics(ABC):
 
   @abstractmethod
   def integrate_forward_jax(
-      self, state: DeviceArray, control: DeviceArray
-  ) -> Tuple[DeviceArray, DeviceArray]:
+      self, state: Array, control: Array
+  ) -> Tuple[Array, Array]:
     """
     Computes one-step time evolution of the system: x+ = f(x, u) with
     additional treatment on state and/or control constraints.
 
     Args:
-        state (DeviceArray)
-        control (DeviceArray)
+        state (Array)
+        control (Array)
 
     Returns:
-        DeviceArray: next state.
+        Array: next state.
     """
     raise NotImplementedError
 
   @abstractmethod
   def _integrate_forward(
-      self, state: DeviceArray, control: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, control: Array
+  ) -> Array:
     """Computes one-step time evolution of the system: x+ = f(x, u).
 
     Args:
-        state (DeviceArray)
-        control (DeviceArray)
+        state (Array)
+        control (Array)
 
     Returns:
-        DeviceArray: next state.
+        Array: next state.
     """
     raise NotImplementedError
 
   @partial(jax.jit, static_argnames='self')
   def get_jacobian(
-      self, nominal_states: DeviceArray, nominal_controls: DeviceArray
-  ) -> Tuple[DeviceArray, DeviceArray]:
+      self, nominal_states: Array, nominal_controls: Array
+  ) -> Tuple[Array, Array]:
     """
     Returns the linearized 'A' and 'B' matrix of the ego vehicle around
     nominal states and controls.
 
     Args:
-        nominal_states (DeviceArray): states along the nominal trajectory.
-        nominal_controls (DeviceArray): controls along the trajectory.
+        nominal_states (Array): states along the nominal trajectory.
+        nominal_controls (Array): controls along the trajectory.
 
     Returns:
-        DeviceArray: the Jacobian of the dynamics w.r.t. the state.
-        DeviceArray: the Jacobian of the dynamics w.r.t. the control.
+        Array: the Jacobian of the dynamics w.r.t. the state.
+        Array: the Jacobian of the dynamics w.r.t. the control.
     """
     _jac = jax.jacfwd(self._integrate_forward, argnums=[0, 1])
     jac = jax.jit(jax.vmap(_jac, in_axes=(1, 1), out_axes=(2, 2)))

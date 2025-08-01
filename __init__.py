@@ -7,6 +7,7 @@ from .base_zs_env import BaseZeroSumEnv
 from .race_car.track import Track
 from .race_car.race_car_single import RaceCarSingle5DEnv
 from .race_car.race_car_dstb import RaceCarDstb5DEnv
+from .dubins_pursuit_evasion import DubinsPursuitEvasionEnv
 from .race_car.cost_bicycle5D import (
     Bicycle5DCost, Bicycle5DConstraint, Bicycle5DReachabilityCost,
     Bicycle5DRefTrajCost
@@ -21,6 +22,7 @@ from .cost.base_cost import BarrierCost, BaseCost
 from .cost.box_cost import BoxObsCost, BoxObsBoxFootprintCost
 
 from .dynamics.bicycle5D import Bicycle5D
+from .dynamics.dubins6D import Dubins6D
 
 from .policy.base_policy import BasePolicy
 from .policy.nn_policy import NeuralNetworkControlSystem
@@ -45,6 +47,11 @@ gym.envs.register(  # no time limit imposed
 gym.envs.register(  # no time limit imposed
     id='RaceCarDstb5DEnv-v1',
     entry_point=RaceCarDstb5DEnv,
+)
+
+gym.envs.register(  # no time limit imposed
+    id='DubinsPursuitEvasionEnv-v1',
+    entry_point=DubinsPursuitEvasionEnv,
 )
 
 # Prevents from opening a pybullet simulator when we don't need to.

@@ -16,7 +16,7 @@ The control is [`accel`, `omega`], where `accel` is the linear acceleration and
 from typing import Tuple, Any
 import numpy as np
 from functools import partial
-from jaxlib.xla_extension import DeviceArray
+from jax import Array  # modern JAX array type
 import jax
 from jax import numpy as jnp
 
@@ -46,17 +46,17 @@ class Bicycle5D(BaseDynamics):
 
   @partial(jax.jit, static_argnames='self')
   def integrate_forward_jax(
-      self, state: DeviceArray, control: DeviceArray
-  ) -> Tuple[DeviceArray, DeviceArray]:
+      self, state: Array, control: Array
+  ) -> Tuple[Array, Array]:
     """Clips the control and computes one-step time evolution of the system.
 
     Args:
-        state (DeviceArray): [x, y, v, psi, delta].
-        control (DeviceArray): [accel, omega].
+        state (Array): [x, y, v, psi, delta].
+        control (Array): [accel, omega].
 
     Returns:
-        DeviceArray: next state.
-        DeviceArray: clipped control.
+        Array: next state.
+        Array: clipped control.
     """
     # Clips the controller values between min and max accel and steer values.
     ctrl_clip = jnp.clip(control, self.ctrl_space[:, 0], self.ctrl_space[:, 1])
@@ -159,8 +159,8 @@ class Bicycle5D(BaseDynamics):
 
   @partial(jax.jit, static_argnames='self')
   def disc_deriv(
-      self, state: DeviceArray, control: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, control: Array
+  ) -> Array:
     deriv = jnp.zeros((self.dim_x,))
     deriv = deriv.at[0].set(state[2] * jnp.cos(state[3]))
     deriv = deriv.at[1].set(state[2] * jnp.sin(state[3]))
@@ -171,8 +171,8 @@ class Bicycle5D(BaseDynamics):
 
   @partial(jax.jit, static_argnames='self')
   def _integrate_forward(
-      self, state: DeviceArray, control: DeviceArray
-  ) -> DeviceArray:
+      self, state: Array, control: Array
+  ) -> Array:
     """ Computes one-step time evolution of the system: x_+ = f(x, u).
     The discrete-time dynamics is as below:
         x_k+1 = x_k + v_k cos(psi_k) dt
@@ -182,11 +182,11 @@ class Bicycle5D(BaseDynamics):
         delta_k+1 = delta_k + u1_k dt
 
     Args:
-        state (DeviceArray): [x, y, v, psi, delta].
-        control (DeviceArray): [accel, omega].
+        state (Array): [x, y, v, psi, delta].
+        control (Array): [accel, omega].
 
     Returns:
-        DeviceArray: next state.
+        Array: next state.
     """
     # @jax.jit
     # def _fwd_step(i, args):  # Euler method.
@@ -201,8 +201,8 @@ class Bicycle5D(BaseDynamics):
 
   @partial(jax.jit, static_argnames='self')
   def _integrate_forward_dt(
-      self, state: DeviceArray, control: DeviceArray, dt: float
-  ) -> DeviceArray:
+      self, state: Array, control: Array, dt: float
+  ) -> Array:
     k1 = self.disc_deriv(state, control)
     k2 = self.disc_deriv(state + k1*dt/2, control)
     k3 = self.disc_deriv(state + k2*dt/2, control)
