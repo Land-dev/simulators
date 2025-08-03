@@ -15,6 +15,7 @@ from typing import Dict, Tuple, Optional, Any, Union
 import numpy as np
 import torch
 from gym import spaces
+import matplotlib.pyplot as plt
 
 from .base_zs_env import BaseZeroSumEnv
 from .agent import Agent
@@ -46,6 +47,33 @@ class DubinsPursuitEvasionEnv(BaseZeroSumEnv):
         self.q2_bounds = getattr(cfg_cost, 'q2_bounds', 1.0)
         self.w_control = getattr(cfg_cost, 'w_control', 0.01)
         self.w_disturbance = getattr(cfg_cost, 'w_disturbance', 0.01)
+        
+        # Set up observation type and reset parameters
+        self.obs_type = getattr(cfg_env, 'obs_type', 'perfect')
+        self.failure_thr = getattr(cfg_env, 'failure_thr', 0.0)
+        self.reset_thr = getattr(cfg_env, 'reset_thr', 0.0)
+        self.reset_rej_sampling = getattr(cfg_env, 'reset_rej_sampling', False)
+        self.end_criterion = getattr(cfg_env, 'end_criterion', 'failure')
+        self.g_x_fail = getattr(cfg_env, 'g_x_fail', 0.1)
+        self.timeout = getattr(cfg_env, 'timeout', 300)
+        
+        # Set up visualization bounds
+        self.visual_bounds = np.array([[-self.state_max, self.state_max], [-self.state_max, self.state_max]])
+        x_eps = (2 * self.state_max) * 0.005
+        y_eps = (2 * self.state_max) * 0.005
+        self.visual_extent = np.array([
+            self.visual_bounds[0, 0] - x_eps, self.visual_bounds[0, 1] + x_eps,
+            self.visual_bounds[1, 0] - y_eps, self.visual_bounds[1, 1] + y_eps
+        ])
+        
+        # Initialize observation and reset spaces
+        self.build_obs_rst_space(cfg_env, cfg_agent, cfg_cost)
+        self.seed(cfg_env.seed)
+        
+        # Add track attribute for visualization compatibility
+        self.track = self  # Self-reference for track plotting methods
+        
+        self.reset()
 
     def get_constraints(self, state: np.ndarray, action: ActionZS, state_nxt: np.ndarray) -> Dict:
         """Define safety constraints.
@@ -66,7 +94,7 @@ class DubinsPursuitEvasionEnv(BaseZeroSumEnv):
         
         # Collision constraint (positive when safe, negative when colliding)
         collision_dist = np.sqrt((xe - xp)**2 + (ye - yp)**2)
-        constraints['collision'] = collision_dist - self.goalR
+        constraints['collision'] = np.array([[collision_dist - self.goalR]])
         
         # Bounds constraints (positive when within bounds)
         evader_bounds_x = min(xe + self.state_max, self.state_max - xe)
@@ -74,8 +102,8 @@ class DubinsPursuitEvasionEnv(BaseZeroSumEnv):
         pursuer_bounds_x = min(xp + self.state_max, self.state_max - xp)
         pursuer_bounds_y = min(yp + self.state_max, self.state_max - yp)
         
-        constraints['evader_bounds'] = min(evader_bounds_x, evader_bounds_y)
-        constraints['pursuer_bounds'] = min(pursuer_bounds_x, pursuer_bounds_y)
+        constraints['evader_bounds'] = np.array([[min(evader_bounds_x, evader_bounds_y)]])
+        constraints['pursuer_bounds'] = np.array([[min(pursuer_bounds_x, pursuer_bounds_y)]])
         
         return constraints
 
@@ -108,8 +136,8 @@ class DubinsPursuitEvasionEnv(BaseZeroSumEnv):
             # Use the existing get_constraints method
             constraints = self.get_constraints(state, action, state)
             
-            # Convert to arrays for consistency
-            return {k: np.array([v]) for k, v in constraints.items()}
+            # Return as is (already in correct format)
+            return constraints
         else:
             # Multiple states case - evaluate each one
             constraint_dict = {}
@@ -124,11 +152,11 @@ class DubinsPursuitEvasionEnv(BaseZeroSumEnv):
                 
                 # Initialize arrays if first iteration
                 if i == 0:
-                    constraint_dict = {k: np.zeros(batch_size) for k in constraints.keys()}
+                    constraint_dict = {k: np.zeros((1, batch_size)) for k in constraints.keys()}
                 
                 # Store values
                 for k, v in constraints.items():
-                    constraint_dict[k][i] = v
+                    constraint_dict[k][0, i] = v[0, 0]  # Extract scalar value from array
             
             return constraint_dict
 
@@ -159,15 +187,19 @@ class DubinsPursuitEvasionEnv(BaseZeroSumEnv):
         
         # Collision penalty (large penalty for collision)
         if constraints is not None and 'collision' in constraints:
-            if constraints['collision'] < 0:  # Collision occurred
-                cost += self.q1_collision * abs(constraints['collision'])
+            collision_val = constraints['collision'][0, 0] if isinstance(constraints['collision'], np.ndarray) else constraints['collision']
+            if collision_val < 0:  # Collision occurred
+                cost += self.q1_collision * abs(collision_val)
         
         # Bounds penalty (penalty for going out of bounds)
         if constraints is not None:
-            if constraints['evader_bounds'] < 0:
-                cost += self.q2_bounds * abs(constraints['evader_bounds'])
-            if constraints['pursuer_bounds'] < 0:
-                cost += self.q2_bounds * abs(constraints['pursuer_bounds'])
+            evader_bounds_val = constraints['evader_bounds'][0, 0] if isinstance(constraints['evader_bounds'], np.ndarray) else constraints['evader_bounds']
+            pursuer_bounds_val = constraints['pursuer_bounds'][0, 0] if isinstance(constraints['pursuer_bounds'], np.ndarray) else constraints['pursuer_bounds']
+            
+            if evader_bounds_val < 0:
+                cost += self.q2_bounds * abs(evader_bounds_val)
+            if pursuer_bounds_val < 0:
+                cost += self.q2_bounds * abs(pursuer_bounds_val)
         
         return cost
 
@@ -218,36 +250,55 @@ class DubinsPursuitEvasionEnv(BaseZeroSumEnv):
         Returns:
             Tuple of (done, info)
         """
+        if end_criterion is None:
+            end_criterion = self.end_criterion
+
         done = False
-        info = {}
-        
-        # Check for collision
-        if constraints['collision'] < 0:
-            done = True
-            info['g_x'] = -1.0  # Safety violation (collision)
-            info['termination_reason'] = 'collision'
-        
-        # Check for bounds violation
-        elif constraints['evader_bounds'] < 0 or constraints['pursuer_bounds'] < 0:
-            done = True
-            info['g_x'] = -1.0  # Safety violation (out of bounds)
-            info['termination_reason'] = 'bounds_violation'
+        done_type = "not_raised"
         
         # Check timeout
-        elif self.cnt >= self.timeout:
+        if self.cnt >= self.timeout:
             done = True
-            info['g_x'] = 0.0  # Timeout (neutral)
-            info['termination_reason'] = 'timeout'
+            done_type = "timeout"
         
-        # Episode continues
+        # Get constraint values (handle both scalar and array formats)
+        if isinstance(constraints['collision'], np.ndarray):
+            g_x = min(constraints['collision'][0, 0], constraints['evader_bounds'][0, 0], constraints['pursuer_bounds'][0, 0])
         else:
-            info['g_x'] = 1.0  # Safe
-            info['termination_reason'] = 'ongoing'
+            g_x = min(constraints['collision'], constraints['evader_bounds'], constraints['pursuer_bounds'])
         
-        # Add additional info
-        info['collision_distance'] = targets['collision_distance']
-        info['evader_bounds_distance'] = targets['evader_bounds_distance']
-        info['pursuer_bounds_distance'] = targets['pursuer_bounds_distance']
+        # Get target values (l_x) - for Dubins, we use collision distance as target
+        if targets is not None:
+            l_x = targets['collision_distance'] - self.goalR  # Positive when safe
+        else:
+            l_x = np.inf
+        
+        # Binary cost (1 if safe, 0 if unsafe)
+        binary_cost = 1.0 if g_x > self.failure_thr else 0.0
+        
+        # Check for failure
+        if end_criterion == 'failure':
+            if g_x > self.failure_thr:
+                done = True
+                done_type = "failure"
+                g_x = self.g_x_fail
+        elif end_criterion == 'timeout':
+            pass  # Already handled above
+        
+        # Build info dictionary
+        info = {
+            'g_x': float(g_x),
+            'l_x': float(l_x),
+            'binary_cost': float(binary_cost),
+            'done_type': done_type,
+            'termination_reason': done_type
+        }
+        
+        # Add additional info if available
+        if targets is not None:
+            info['collision_distance'] = targets['collision_distance']
+            info['evader_bounds_distance'] = targets['evader_bounds_distance']
+            info['pursuer_bounds_distance'] = targets['pursuer_bounds_distance']
         
         return done, info
 
@@ -274,32 +325,82 @@ class DubinsPursuitEvasionEnv(BaseZeroSumEnv):
         Returns:
             Initial observation
         """
+        super().reset()
+        
         if state is None:
-            # Generate random initial state
-            self.state = np.array([
-                np.random.uniform(-self.state_max, self.state_max),  # x_e
-                np.random.uniform(-self.state_max, self.state_max),  # y_e
-                np.random.uniform(-np.pi, np.pi),                    # theta_e
-                np.random.uniform(-self.state_max, self.state_max),  # x_p
-                np.random.uniform(-self.state_max, self.state_max),  # y_p
-                np.random.uniform(-np.pi, np.pi)                     # theta_p
-            ])
+            # Use reset space if available, otherwise generate random state
+            if hasattr(self, 'reset_sample_sapce'):
+                self.state = self.reset_sample_sapce.sample()
+            else:
+                # Generate random initial state
+                self.state = np.array([
+                    np.random.uniform(-self.state_max, self.state_max),  # x_e
+                    np.random.uniform(-self.state_max, self.state_max),  # y_e
+                    np.random.uniform(-np.pi, np.pi),                    # theta_e
+                    np.random.uniform(-self.state_max, self.state_max),  # x_p
+                    np.random.uniform(-self.state_max, self.state_max),  # y_p
+                    np.random.uniform(-np.pi, np.pi)                     # theta_p
+                ])
             
             # Ensure initial separation is greater than collision radius
             xe, ye = self.state[0], self.state[1]
             xp, yp = self.state[3], self.state[4]
             initial_dist = np.sqrt((xe - xp)**2 + (ye - yp)**2)
             
-            if initial_dist < self.goalR * 2:  # Ensure safe initial separation
+            if initial_dist < self.goalR * 4:  # Ensure safe initial separation (increased from 2 to 4)
                 # Move pursuer away from evader
                 angle = np.arctan2(yp - ye, xp - xe)
-                self.state[3] = xe + self.goalR * 2 * np.cos(angle)
-                self.state[4] = ye + self.goalR * 2 * np.sin(angle)
+                self.state[3] = xe + self.goalR * 4 * np.cos(angle)
+                self.state[4] = ye + self.goalR * 4 * np.sin(angle)
         else:
             self.state = state.copy()
         
         self.cnt = 0
         return self.get_obs(self.state)
+
+    def build_obs_rst_space(self, cfg_env, cfg_agent, cfg_cost):
+        """Build observation and reset spaces."""
+        # Reset Sample Space
+        reset_space = np.array(cfg_env.reset_space, dtype=np.float32)
+        self.reset_sample_sapce = spaces.Box(
+            low=reset_space[:, 0], high=reset_space[:, 1]
+        )
+
+        # Observation space
+        if self.obs_type == "perfect":
+            low = np.zeros((self.state_dim,))
+            low[0] = -self.state_max  # x_e
+            low[1] = -self.state_max  # y_e
+            low[2] = 0.0  # v_e (evader velocity)
+            low[3] = -np.pi  # theta_e
+            low[4] = -self.state_max  # x_p
+            low[5] = -self.state_max  # y_p
+            high = np.zeros((self.state_dim,))
+            high[0] = self.state_max  # x_e
+            high[1] = self.state_max  # y_e
+            high[2] = cfg_agent.evader_velocity  # v_e
+            high[3] = np.pi  # theta_e
+            high[4] = self.state_max  # x_p
+            high[5] = self.state_max  # y_p
+        else:
+            raise ValueError(f"Observation type {self.obs_type} is not supported!")
+        
+        self.observation_space = spaces.Box(
+            low=np.float32(low), high=np.float32(high)
+        )
+        self.obs_dim = self.observation_space.low.shape[0]
+
+    def seed(self, seed: int = 0):
+        """Set random seed."""
+        super().seed(seed)
+        if hasattr(self, 'reset_sample_sapce'):
+            self.reset_sample_sapce.seed(seed)
+
+    def get_samples(self, nx: int, ny: int):
+        """Get state samples for value function plotting."""
+        xs = np.linspace(self.visual_bounds[0, 0], self.visual_bounds[0, 1], nx)
+        ys = np.linspace(self.visual_bounds[1, 0], self.visual_bounds[1, 1], ny)
+        return xs, ys
 
     def render(self):
         """Render the environment (placeholder)."""
@@ -307,6 +408,35 @@ class DubinsPursuitEvasionEnv(BaseZeroSumEnv):
         print(f"Evader: ({self.state[0]:.2f}, {self.state[1]:.2f}, {self.state[2]:.2f})")
         print(f"Pursuer: ({self.state[3]:.2f}, {self.state[4]:.2f}, {self.state[5]:.2f})")
         print(f"Distance: {np.sqrt((self.state[0]-self.state[3])**2 + (self.state[1]-self.state[4])**2):.2f}")
+
+    def render_obs(self, ax=None, c='r'):
+        """Render obstacles (placeholder for Dubins environment)."""
+        # Dubins environment doesn't have obstacles, so this is a no-op
+        pass
+
+    def plot_track(self, ax, c='k'):
+        """Plot track boundaries (placeholder for Dubins environment)."""
+        # For Dubins, plot the state space boundaries
+        x_min, x_max = self.visual_bounds[0]
+        y_min, y_max = self.visual_bounds[1]
+        
+        # Plot boundary rectangle
+        rect = plt.Rectangle((x_min, y_min), x_max - x_min, y_max - y_min, 
+                           linewidth=2, edgecolor=c, facecolor='none')
+        ax.add_patch(rect)
+        
+        # Plot collision radius around current positions
+        if hasattr(self, 'state') and self.state is not None:
+            xe, ye = self.state[0], self.state[1]
+            xp, yp = self.state[3], self.state[4]
+            
+            # Evader circle
+            evader_circle = plt.Circle((xe, ye), self.goalR, color='blue', alpha=0.3)
+            ax.add_patch(evader_circle)
+            
+            # Pursuer circle
+            pursuer_circle = plt.Circle((xp, yp), self.goalR, color='red', alpha=0.3)
+            ax.add_patch(pursuer_circle)
 
     def report(self):
         """Report environment information."""
